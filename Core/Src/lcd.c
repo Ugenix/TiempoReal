@@ -13,8 +13,7 @@
 /* Private macros ------------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
 /* Private function prototypes -----------------------------------------------*/
-static void lcd_setRowOffsets(LCD_t *lcd, int row0, int row1, int row2,
-    int row3);
+static void lcd_setRowOffsets(LCD_t *lcd, int row0, int row1, int row2, int row3);
 static void lcd_send(LCD_t *lcd, char data, uint8_t rs);
 static void lcd_sendData(LCD_t *lcd, char data);
 static void lcd_sendCmd(LCD_t *lcd, char cmd);
@@ -35,11 +34,11 @@ void lcd_begin(LCD_t *lcd, uint8_t cols, uint8_t rows, uint8_t dotsize) {
 		lcd->displayfunction |= LCD_5x10DOTS;
 	}
 
-	HAL_Delay(50);	// wait for >40ms
+	HAL_Delay(50);			// wait for >40ms
 	lcd_sendCmd(lcd, 0x03);
-	HAL_Delay(5);		// wait for >4.1ms
+	HAL_Delay(5);			// wait for >4.1ms
 	lcd_sendCmd(lcd, 0x03);
-	delay_us(150);	// wait for >100us
+	delay_us(150);			// wait for >100us
 	lcd_sendCmd(lcd, 0x03);
 	lcd_sendCmd(lcd, 0x02);	//set 4 bit mode
 	HAL_Delay(1);
@@ -75,6 +74,7 @@ void lcd_noDisplay(LCD_t *lcd) {
 	lcd->displaycontrol &= ~LCD_DISPLAYON;
 	lcd_sendCmd(lcd, LCD_DISPLAYCONTROL | lcd->displaycontrol);
 }
+
 // ----------------------------------------------------------------
 
 // Turn the display on
@@ -82,46 +82,53 @@ void lcd_display(LCD_t *lcd) {
 	lcd->displaycontrol |= LCD_DISPLAYON;
 	lcd_sendCmd(lcd, LCD_DISPLAYCONTROL | lcd->displaycontrol);
 }
-// ----------------------------------------------------------------
 
+// ----------------------------------------------------------------
+/*
 // Turn off the blinking cursor
 void lcd_noBlink(LCD_t *lcd) {
 	lcd->displaycontrol &= ~LCD_BLINKON;
 	lcd_sendCmd(lcd, LCD_DISPLAYCONTROL | lcd->displaycontrol);
 }
+*/
 // ----------------------------------------------------------------
-
+/*
 // Turn on the blinking cursor
 void lcd_blink(LCD_t *lcd) {
 	lcd->displaycontrol |= LCD_BLINKON;
 	lcd_sendCmd(lcd, LCD_DISPLAYCONTROL | lcd->displaycontrol);
 }
+*/
 // ----------------------------------------------------------------
-
+/*
 // Turns the underline cursor off
 void lcd_noCursor(LCD_t *lcd) {
 	lcd->displaycontrol &= ~LCD_CURSORON;
 	lcd_sendCmd(lcd, LCD_DISPLAYCONTROL | lcd->displaycontrol);
 }
+*/
 // ----------------------------------------------------------------
-
+/*
 // Turns the underline cursor on
 void lcd_cursor(LCD_t *lcd) {
 	lcd->displaycontrol |= LCD_CURSORON;
 	lcd_sendCmd(lcd, LCD_DISPLAYCONTROL | lcd->displaycontrol);
 }
+*/
 // ----------------------------------------------------------------
-
+/*
 //scroll the display to left without changing the RAM
 void lcd_scrollDisplayLeft(LCD_t *lcd) {
 	lcd_sendCmd(lcd, LCD_CURSORSHIFT | LCD_DISPLAYMOVE | LCD_MOVELEFT);
 }
+*/
 // ----------------------------------------------------------------
-
+/*
 //scroll the display to right without changing the RAM
 void lcd_scrollDisplayRight(LCD_t *lcd) {
 	lcd_sendCmd(lcd, LCD_CURSORSHIFT | LCD_DISPLAYMOVE | LCD_MOVERIGHT);
 }
+/¡*/
 // ----------------------------------------------------------------
 
 //set cursor position
@@ -174,6 +181,7 @@ static void lcd_send(LCD_t *lcd, char data, uint8_t rs) {
 }
 // ----------------------------------------------------------------
 
+//When 4bit bus mode, it needs to transfer 4bit data by two times
 //send data to lcd
 static void lcd_sendData(LCD_t *lcd, char data) {
 	char _data;
@@ -188,6 +196,7 @@ static void lcd_sendData(LCD_t *lcd, char data) {
 }
 // ----------------------------------------------------------------
 
+//When 4bit bus mode, it needs to transfer 4bit data by two times
 //send command to lcd
 static void lcd_sendCmd(LCD_t *lcd, char cmd) {
 	char _cmd;
@@ -210,3 +219,6 @@ static void delay_us(uint16_t time) {
 	}
 }
 // ----------------------------------------------------------------
+
+
+

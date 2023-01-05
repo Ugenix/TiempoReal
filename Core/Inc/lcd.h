@@ -32,7 +32,7 @@ typedef struct {
 
 	//Graphics settings
 	uint8_t displaycontrol; 	//for display control command
-	uint8_t displayfunction;	//for display funtion command
+	uint8_t displayfunction;	//for display function command
 	uint8_t displaymode;		//for display mode command
 	uint8_t row_offsets[4];		//offset value for rows in RAM
 	uint8_t cols;				//num of colums
@@ -88,13 +88,12 @@ void lcd_clear(LCD_t *lcd);
 void lcd_home(LCD_t *lcd);
 void lcd_noDisplay(LCD_t *lcd);
 void lcd_display(LCD_t *lcd);
-void lcd_noBlink(LCD_t *lcd);
-void lcd_blink(LCD_t *lcd);
-void lcd_noCursor(LCD_t *lcd);
-void lcd_cursor(LCD_t *lcd);
-void lcd_scrollDisplayLeft(LCD_t *lcd);
-void lcd_scrollDisplayRight(LCD_t *lcd);
+//void lcd_noBlink(LCD_t *lcd);
+//void lcd_blink(LCD_t *lcd);
+//void lcd_noCursor(LCD_t *lcd);
+//void lcd_cursor(LCD_t *lcd);
+//void lcd_scrollDisplayLeft(LCD_t *lcd);
+//void lcd_scrollDisplayRight(LCD_t *lcd);
 void lcd_setCursor(LCD_t *lcd, uint8_t col, uint8_t row);
 void lcd_print(LCD_t *lcd, char *str);
-
 #endif /* INC_LCD_H_ */
