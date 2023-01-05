@@ -9,14 +9,16 @@
 
 extern I2C_HandleTypeDef hi2c1;
 
-
+// ----------------------------------------------------------------
 uint8_t bcd2bin(uint8_t data){
  return ((data>>4)*10)+(data&0x0F);
 }
+// ----------------------------------------------------------------
 
 uint8_t bin2bcd(uint8_t data){
 	return ((data/10)<<4)|(data%10);
 }
+// ----------------------------------------------------------------
 
 uint8_t rtc_read(uint8_t address)
 {
@@ -28,6 +30,7 @@ uint8_t rtc_read(uint8_t address)
 
 	return data;
 }
+// ----------------------------------------------------------------
 
 void rtc_write(uint8_t address,uint8_t data)
 {
@@ -35,6 +38,7 @@ void rtc_write(uint8_t address,uint8_t data)
 		//_Error_Handler(__FILE__,__LINE__);
 	}
 }
+// ----------------------------------------------------------------
 
 void rtc_init(uint8_t rs,uint8_t sqwe,uint8_t out)
 {
@@ -44,6 +48,7 @@ void rtc_init(uint8_t rs,uint8_t sqwe,uint8_t out)
 
 	rtc_write(0x07,rs);
 }
+// ----------------------------------------------------------------
 
 void rtc_get_time(uint8_t *hour,uint8_t *min,uint8_t *sec)
 {
@@ -56,6 +61,7 @@ void rtc_get_time(uint8_t *hour,uint8_t *min,uint8_t *sec)
 	*min=bcd2bin(data[1]);
 	*hour=bcd2bin(data[2]);
 }
+// ----------------------------------------------------------------
 
 void rtc_set_time(uint8_t hour,uint8_t min,uint8_t sec)
 {
@@ -64,6 +70,7 @@ void rtc_set_time(uint8_t hour,uint8_t min,uint8_t sec)
 		//_Error_Handler(__FILE__,__LINE__);
 	}
 }
+// ----------------------------------------------------------------
 
 void rtc_get_date(uint8_t *week_day,uint8_t *day,uint8_t *month,uint8_t *year)
 {
@@ -77,6 +84,7 @@ void rtc_get_date(uint8_t *week_day,uint8_t *day,uint8_t *month,uint8_t *year)
 	*month=bcd2bin(data[2]);
 	*year=bcd2bin(data[3]);
 }
+// ----------------------------------------------------------------
 
 void rtc_set_date(uint8_t week_day,uint8_t day,uint8_t month,uint8_t year)
 {
@@ -85,6 +93,7 @@ void rtc_set_date(uint8_t week_day,uint8_t day,uint8_t month,uint8_t year)
 		//_Error_Handler(__FILE__,__LINE__);
 	}
 }
+// ----------------------------------------------------------------
 
 
 

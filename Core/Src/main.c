@@ -55,6 +55,37 @@ const osThreadAttr_t defaultTask_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
+/* Definitions for mostrarLCD */
+osThreadId_t mostrarLCDHandle;
+const osThreadAttr_t mostrarLCD_attributes = {
+  .name = "mostrarLCD",
+  .stack_size = 256 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for controlRGB */
+osThreadId_t controlRGBHandle;
+const osThreadAttr_t controlRGB_attributes = {
+  .name = "controlRGB",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for lecturaBotones */
+osThreadId_t lecturaBotonesHandle;
+const osThreadAttr_t lecturaBotones_attributes = {
+  .name = "lecturaBotones",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for mutexRGB */
+osMutexId_t mutexRGBHandle;
+const osMutexAttr_t mutexRGB_attributes = {
+  .name = "mutexRGB"
+};
+/* Definitions for mutexDisplayLCD */
+osMutexId_t mutexDisplayLCDHandle;
+const osMutexAttr_t mutexDisplayLCD_attributes = {
+  .name = "mutexDisplayLCD"
+};
 /* USER CODE BEGIN PV */
 LCD_t lcd;
 uint8_t sec,min,hour;
@@ -69,6 +100,9 @@ static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_ADC1_Init(void);
 void StartDefaultTask(void *argument);
+void MostrarDatosLCD(void *argument);
+void ControlRGB(void *argument);
+void LecturaBotones(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -142,12 +176,18 @@ int main(void)
   //DS1307 init
   rtc_init(0,1,0);
 
-  rtc_set_time(23,59,50);
-  rtc_set_date(7, 7, 1, 23);
+  rtc_set_time(16,22,00);
+  rtc_set_date(4, 5, 1, 23);
   /* USER CODE END 2 */
 
   /* Init scheduler */
   osKernelInitialize();
+  /* Create the mutex(es) */
+  /* creation of mutexRGB */
+  mutexRGBHandle = osMutexNew(&mutexRGB_attributes);
+
+  /* creation of mutexDisplayLCD */
+  mutexDisplayLCDHandle = osMutexNew(&mutexDisplayLCD_attributes);
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
@@ -168,6 +208,15 @@ int main(void)
   /* Create the thread(s) */
   /* creation of defaultTask */
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+
+  /* creation of mostrarLCD */
+  mostrarLCDHandle = osThreadNew(MostrarDatosLCD, NULL, &mostrarLCD_attributes);
+
+  /* creation of controlRGB */
+  controlRGBHandle = osThreadNew(ControlRGB, NULL, &controlRGB_attributes);
+
+  /* creation of lecturaBotones */
+  lecturaBotonesHandle = osThreadNew(LecturaBotones, NULL, &lecturaBotones_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -451,19 +500,75 @@ void StartDefaultTask(void *argument)
   /* Infinite loop */
   for(;;)
   {
+	  osDelay(1);
+  }
+  /* USER CODE END 5 */
+}
+
+/* USER CODE BEGIN Header_MostrarDatosLCD */
+/**
+* @brief Function implementing the mostrarLCD thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_MostrarDatosLCD */
+void MostrarDatosLCD(void *argument)
+{
+  /* USER CODE BEGIN MostrarDatosLCD */
+	char *name_day[] = {"LUN", "MAR", "MIE", "JUE", "VIE", "SAB", "DOM"};
+  /* Infinite loop */
+  for(;;)
+  {
 	rtc_get_time(&hour, &min, &sec);
 	rtc_get_date(&week_day, &day, &month, &year);
 
 	lcd_home(&lcd);
 	lcd_setCursor(&lcd, 0, 0);
-	sprintf(str,"Date:%01d %02d/%02d/%02d", week_day, day, month, year);
+	sprintf(str,"%02d/%02d/%02d   %s", day, month, year, name_day[week_day-1]);
 	lcd_print(&lcd, str);
 	lcd_setCursor(&lcd, 0, 1);
-	sprintf(str,"Time: %02d:%02d:%02d", hour, min, sec);
+	sprintf(str,"%02d:%02d:%02d T=20.5C", hour, min, sec);
 	lcd_print(&lcd, str);
+
     osDelay(1);
   }
-  /* USER CODE END 5 */
+  /* USER CODE END MostrarDatosLCD */
+}
+
+/* USER CODE BEGIN Header_ControlRGB */
+/**
+* @brief Function implementing the controlRGB thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_ControlRGB */
+void ControlRGB(void *argument)
+{
+  /* USER CODE BEGIN ControlRGB */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END ControlRGB */
+}
+
+/* USER CODE BEGIN Header_LecturaBotones */
+/**
+* @brief Function implementing the lecturaBotones thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_LecturaBotones */
+void LecturaBotones(void *argument)
+{
+  /* USER CODE BEGIN LecturaBotones */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END LecturaBotones */
 }
 
 /**
