@@ -62,13 +62,6 @@ const osThreadAttr_t mostrarLCD_attributes = {
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
-/* Definitions for controlRGB */
-osThreadId_t controlRGBHandle;
-const osThreadAttr_t controlRGB_attributes = {
-  .name = "controlRGB",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
-};
 /* Definitions for lecturaBotones */
 osThreadId_t lecturaBotonesHandle;
 const osThreadAttr_t lecturaBotones_attributes = {
@@ -76,21 +69,34 @@ const osThreadAttr_t lecturaBotones_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
-/* Definitions for mutexRGB */
-osMutexId_t mutexRGBHandle;
-const osMutexAttr_t mutexRGB_attributes = {
-  .name = "mutexRGB"
+/* Definitions for lectura */
+osThreadId_t lecturaHandle;
+const osThreadAttr_t lectura_attributes = {
+  .name = "lectura",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
 };
-/* Definitions for mutexDisplayLCD */
-osMutexId_t mutexDisplayLCDHandle;
-const osMutexAttr_t mutexDisplayLCD_attributes = {
-  .name = "mutexDisplayLCD"
+/* Definitions for datos */
+osMessageQueueId_t datosHandle;
+const osMessageQueueAttr_t datos_attributes = {
+  .name = "datos"
+};
+/* Definitions for lcdDisplayFlag */
+osEventFlagsId_t lcdDisplayFlagHandle;
+const osEventFlagsAttr_t lcdDisplayFlag_attributes = {
+  .name = "lcdDisplayFlag"
+};
+/* Definitions for rgbModeFlag */
+osEventFlagsId_t rgbModeFlagHandle;
+const osEventFlagsAttr_t rgbModeFlag_attributes = {
+  .name = "rgbModeFlag"
 };
 /* USER CODE BEGIN PV */
 LCD_t lcd;
 uint8_t sec,min,hour;
 uint8_t week_day,day,month,year;
-char str[16];
+char str[16], msg[64];
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -101,8 +107,8 @@ static void MX_I2C1_Init(void);
 static void MX_ADC1_Init(void);
 void StartDefaultTask(void *argument);
 void MostrarDatosLCD(void *argument);
-void ControlRGB(void *argument);
 void LecturaBotones(void *argument);
+void Lectura(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -110,6 +116,75 @@ void LecturaBotones(void *argument);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+void set_RGB(uint8_t red, uint8_t green, uint8_t blue) //¿¿¿En el modulo esta cambiado R por G????
+{
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, green);
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, red);
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, blue);
+}
+
+void leer_pulsador() //No funciona bien
+{
+	uint8_t display = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_10);
+	uint8_t rgb_mode = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_11);
+	uint32_t flagLCD, flagRGB;
+
+	if(display==1) // On/Off Display
+	{
+		flagLCD = osEventFlagsGet(lcdDisplayFlagHandle);
+		if(flagLCD==0x00000000U)
+		{
+			lcd_noDisplay(&lcd);
+			osEventFlagsSet(lcdDisplayFlagHandle, 0x00000001U);
+		}
+		else
+		{
+			lcd_display(&lcd);
+			osEventFlagsSet(lcdDisplayFlagHandle, 0x00000000U);
+		}
+	}
+
+	if(rgb_mode==1) // Boton RGB
+	{
+		flagRGB = osEventFlagsGet(rgbModeFlagHandle);
+		switch(flagRGB)
+		{
+			case 0x00000000U:
+				set_RGB(1,0,0); // R
+				osEventFlagsSet(rgbModeFlagHandle, 0x00000001U);
+				break;
+			case 0x00000001U:
+				set_RGB(0,1,0); // G
+				osEventFlagsSet(rgbModeFlagHandle, 0x00000002U);
+				break;
+			case 0x00000002U:
+				set_RGB(0,0,1); // B
+				osEventFlagsSet(rgbModeFlagHandle, 0x00000004U);
+				break;
+			case 0x00000004U:
+				set_RGB(1,1,0); // R+G
+				osEventFlagsSet(rgbModeFlagHandle, 0x00000008U);
+				break;
+			case 0x00000008U:
+				set_RGB(1,0,1); // R+B
+				osEventFlagsSet(rgbModeFlagHandle, 0x00000010U);
+				break;
+			case 0x00000010U:
+				set_RGB(0,1,1); // G+B
+				osEventFlagsSet(rgbModeFlagHandle, 0x00000020U);
+				break;
+			case 0x00000020U:
+				set_RGB(1,1,1); // apagado
+				osEventFlagsSet(rgbModeFlagHandle, 0x00000040U);
+				break;
+			default:
+				set_RGB(0,0,0); //R+G+B
+				osEventFlagsSet(rgbModeFlagHandle, 0x00000000U);
+				break;
+		}
+	}
+}
 
 /* USER CODE END 0 */
 
@@ -146,20 +221,22 @@ int main(void)
   MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
   // ----- LCD SETTINGS -----
-  lcd.RS_port= LCD_RS_GPIO_Port;
-  lcd.RS_pin = LCD_RS_Pin;
+  lcd.RS_port	= LCD_RS_GPIO_Port;
+  lcd.RS_pin 	= LCD_RS_Pin;
   //lcd.RW_port = LCD_RW_GPIO_Port;
-  //lcd.RW_pin = LCD_RW_Pin;
-  lcd.EN_port = LCD_EN_GPIO_Port;
-  lcd.EN_pin = LCD_EN_Pin;
-  lcd.D4_port = D4_GPIO_Port;
-  lcd.D4_pin = D4_Pin;
-  lcd.D5_port = D5_GPIO_Port;
-  lcd.D5_pin = D5_Pin;
-  lcd.D6_port = D6_GPIO_Port;
-  lcd.D6_pin = D6_Pin;
-  lcd.D7_port = D7_GPIO_Port;
-  lcd.D7_pin = D7_Pin;
+  //lcd.RW_pin 	= LCD_RW_Pin;
+  lcd.EN_port 	= LCD_EN_GPIO_Port;
+  lcd.EN_pin 	= LCD_EN_Pin;
+  lcd.D4_port	= D4_GPIO_Port;
+  lcd.D4_pin 	= D4_Pin;
+  lcd.D5_port 	= D5_GPIO_Port;
+  lcd.D5_pin 	= D5_Pin;
+  lcd.D6_port 	= D6_GPIO_Port;
+  lcd.D6_pin 	= D6_Pin;
+  lcd.D7_port 	= D7_GPIO_Port;
+  lcd.D7_pin 	= D7_Pin;
+
+  //lcd_init(&lcd) //
 
   // ----- LCD Init -----
   lcd_begin(&lcd, 16, 2, LCD_5x8DOTS);
@@ -169,25 +246,24 @@ int main(void)
   lcd_print(&lcd, "  Tiempo Real   ");
   lcd_setCursor(&lcd, 0, 1);
   lcd_print(&lcd, "  Xiang & Alex  ");
+
+  set_RGB(1,1,1);
+
   HAL_Delay(3000);
+
+  set_RGB(0,0,0);
   lcd_clear(&lcd);
   lcd_home(&lcd);
 
   //DS1307 init
   rtc_init(0,1,0);
 
-  rtc_set_time(16,22,00);
-  rtc_set_date(4, 5, 1, 23);
+  rtc_set_time(00,00,00);
+  rtc_set_date(1, 1, 1, 23);
   /* USER CODE END 2 */
 
   /* Init scheduler */
   osKernelInitialize();
-  /* Create the mutex(es) */
-  /* creation of mutexRGB */
-  mutexRGBHandle = osMutexNew(&mutexRGB_attributes);
-
-  /* creation of mutexDisplayLCD */
-  mutexDisplayLCDHandle = osMutexNew(&mutexDisplayLCD_attributes);
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
@@ -201,6 +277,10 @@ int main(void)
   /* start timers, add new ones, ... */
   /* USER CODE END RTOS_TIMERS */
 
+  /* Create the queue(s) */
+  /* creation of datos */
+  datosHandle = osMessageQueueNew (128, sizeof(float), &datos_attributes);
+
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
   /* USER CODE END RTOS_QUEUES */
@@ -212,18 +292,27 @@ int main(void)
   /* creation of mostrarLCD */
   mostrarLCDHandle = osThreadNew(MostrarDatosLCD, NULL, &mostrarLCD_attributes);
 
-  /* creation of controlRGB */
-  controlRGBHandle = osThreadNew(ControlRGB, NULL, &controlRGB_attributes);
-
   /* creation of lecturaBotones */
   lecturaBotonesHandle = osThreadNew(LecturaBotones, NULL, &lecturaBotones_attributes);
+
+  /* creation of lectura */
+  lecturaHandle = osThreadNew(Lectura, NULL, &lectura_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
 
+  /* Create the event(s) */
+  /* creation of lcdDisplayFlag */
+  lcdDisplayFlagHandle = osEventFlagsNew(&lcdDisplayFlag_attributes);
+
+  /* creation of rgbModeFlag */
+  rgbModeFlagHandle = osEventFlagsNew(&rgbModeFlag_attributes);
+
   /* USER CODE BEGIN RTOS_EVENTS */
   /* add events, ... */
+  osEventFlagsSet(lcdDisplayFlagHandle, 0x00000000U);
+  osEventFlagsSet(rgbModeFlagHandle, 0x00000000U);
   /* USER CODE END RTOS_EVENTS */
 
   /* Start scheduler */
@@ -422,11 +511,14 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, LD2_Pin|RGB_green_Pin|RGB_red_Pin|RGB_blue_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, LCD_EN_Pin|LCD_RS_Pin|D7_Pin|D6_Pin
                           |D5_Pin|D4_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOC, BotonDisplay_Pin|BotonRGB_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
@@ -434,12 +526,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : LD2_Pin */
-  GPIO_InitStruct.Pin = LD2_Pin;
+  /*Configure GPIO pins : LD2_Pin RGB_green_Pin RGB_red_Pin RGB_blue_Pin */
+  GPIO_InitStruct.Pin = LD2_Pin|RGB_green_Pin|RGB_red_Pin|RGB_blue_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pins : LCD_EN_Pin LCD_RS_Pin D7_Pin D6_Pin
                            D5_Pin D4_Pin */
@@ -449,6 +541,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : BotonDisplay_Pin BotonRGB_Pin */
+  GPIO_InitStruct.Pin = BotonDisplay_Pin|BotonRGB_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
 }
 
@@ -472,7 +571,7 @@ void lcd_config(LCD_t lcd) {
 }
 */
 /*
-void lcd_init(LCD_t *lcd) {
+void lcd_init(LCD_t *lcd_dir) {
 	lcd_begin(&lcd, 16, 2, LCD_5x8DOTS);
 
 	// Mensaje inicial
@@ -515,42 +614,27 @@ void StartDefaultTask(void *argument)
 void MostrarDatosLCD(void *argument)
 {
   /* USER CODE BEGIN MostrarDatosLCD */
-	char *name_day[] = {"LUN", "MAR", "MIE", "JUE", "VIE", "SAB", "DOM"};
+  float datoMostrar;
+  char *dayName[] = {"LUN", "MAR", "MIE", "JUE", "VIE", "SAB", "DOM"};
   /* Infinite loop */
   for(;;)
   {
+	osMessageQueueGet(datosHandle, &datoMostrar, NULL, osWaitForever);
+
 	rtc_get_time(&hour, &min, &sec);
 	rtc_get_date(&week_day, &day, &month, &year);
 
 	lcd_home(&lcd);
 	lcd_setCursor(&lcd, 0, 0);
-	sprintf(str,"%02d/%02d/%02d   %s", day, month, year, name_day[week_day-1]);
+	sprintf(str,"%02d/%02d/%02d   %s", day, month, year, dayName[week_day-1]);
 	lcd_print(&lcd, str);
 	lcd_setCursor(&lcd, 0, 1);
-	sprintf(str,"%02d:%02d:%02d T=20.5C", hour, min, sec);
+	sprintf(str,"%02d:%02d:%02d T=%2.1fC", hour, min, sec, datoMostrar);
 	lcd_print(&lcd, str);
 
-    osDelay(1);
+    osDelay(10);
   }
   /* USER CODE END MostrarDatosLCD */
-}
-
-/* USER CODE BEGIN Header_ControlRGB */
-/**
-* @brief Function implementing the controlRGB thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_ControlRGB */
-void ControlRGB(void *argument)
-{
-  /* USER CODE BEGIN ControlRGB */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
-  /* USER CODE END ControlRGB */
 }
 
 /* USER CODE BEGIN Header_LecturaBotones */
@@ -566,9 +650,40 @@ void LecturaBotones(void *argument)
   /* Infinite loop */
   for(;;)
   {
-    osDelay(1);
+	leer_pulsador();
+    osDelay(10);
   }
   /* USER CODE END LecturaBotones */
+}
+
+/* USER CODE BEGIN Header_Lectura */
+/**
+* @brief Function implementing the lectura thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_Lectura */
+void Lectura(void *argument)
+{
+  /* USER CODE BEGIN Lectura */
+	uint8_t temp;
+	float temp_celsius;
+	HAL_StatusTypeDef status;
+
+  /* Infinite loop */
+  for(;;)
+  {
+	HAL_ADC_Start(&hadc1);
+	status = HAL_ADC_PollForConversion(&hadc1, 1);
+	if(status==HAL_OK)
+		temp = HAL_ADC_GetValue(&hadc1);
+	HAL_ADC_Stop(&hadc1);
+	temp_celsius = (((0.001221)*temp)-0.5)/(0.01); //¿¿mal o quemado??
+
+	osMessageQueuePut(datosHandle, &temp_celsius, osPriorityNormal, osWaitForever);
+    osDelay(1);
+  }
+  /* USER CODE END Lectura */
 }
 
 /**
