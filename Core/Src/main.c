@@ -25,6 +25,8 @@
 #include "lcd.h"
 #include "ds1307.h"
 #include "stdio.h"
+
+#include "ssd1306.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -45,6 +47,7 @@
 ADC_HandleTypeDef hadc1;
 
 I2C_HandleTypeDef hi2c1;
+I2C_HandleTypeDef hi2c3;
 
 UART_HandleTypeDef huart2;
 
@@ -62,17 +65,24 @@ const osThreadAttr_t mostrarLCD_attributes = {
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
-/* Definitions for lecturaBotones */
-osThreadId_t lecturaBotonesHandle;
-const osThreadAttr_t lecturaBotones_attributes = {
-  .name = "lecturaBotones",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
-};
 /* Definitions for lectura */
 osThreadId_t lecturaHandle;
 const osThreadAttr_t lectura_attributes = {
   .name = "lectura",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for setRGB */
+osThreadId_t setRGBHandle;
+const osThreadAttr_t setRGB_attributes = {
+  .name = "setRGB",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for OLED_TASKHAndle */
+osThreadId_t OLED_TASKHAndleHandle;
+const osThreadAttr_t OLED_TASKHAndle_attributes = {
+  .name = "OLED_TASKHAndle",
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
@@ -91,12 +101,25 @@ osEventFlagsId_t rgbModeFlagHandle;
 const osEventFlagsAttr_t rgbModeFlag_attributes = {
   .name = "rgbModeFlag"
 };
+/* Definitions for myEvent01 */
+osEventFlagsId_t myEvent01Handle;
+const osEventFlagsAttr_t myEvent01_attributes = {
+  .name = "myEvent01"
+};
 /* USER CODE BEGIN PV */
 LCD_t lcd;
 uint8_t sec,min,hour;
 uint8_t week_day,day,month,year;
 char str[16], msg[64];
 
+uint8_t buffer[8];
+char buff[8];
+int data = 0;
+char mensaje[2];
+uint8_t H_data = 0;
+
+uint8_t set_hora[3];
+uint8_t set_date[4];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -105,13 +128,18 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_ADC1_Init(void);
+static void MX_I2C3_Init(void);
 void StartDefaultTask(void *argument);
 void MostrarDatosLCD(void *argument);
-void LecturaBotones(void *argument);
 void Lectura(void *argument);
+void SetRGB(void *argument);
+void StartTask06(void *argument);
 
 /* USER CODE BEGIN PFP */
-
+void ssd1306_InitText();
+void lcd_config(void);
+void lcd_rgb_init(LCD_t *lcd_dir);
+void ds1307_init(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -119,73 +147,10 @@ void Lectura(void *argument);
 
 void set_RGB(uint8_t red, uint8_t green, uint8_t blue) //¿¿¿En el modulo esta cambiado R por G????
 {
-	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, green);
-	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, red);
-	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, blue);
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, blue);
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, green);
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, red);
 }
-
-void leer_pulsador() //No funciona bien
-{
-	uint8_t display = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_10);
-	uint8_t rgb_mode = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_11);
-	uint32_t flagLCD, flagRGB;
-
-	if(display==1) // On/Off Display
-	{
-		flagLCD = osEventFlagsGet(lcdDisplayFlagHandle);
-		if(flagLCD==0x00000000U)
-		{
-			lcd_noDisplay(&lcd);
-			osEventFlagsSet(lcdDisplayFlagHandle, 0x00000001U);
-		}
-		else
-		{
-			lcd_display(&lcd);
-			osEventFlagsSet(lcdDisplayFlagHandle, 0x00000000U);
-		}
-	}
-
-	if(rgb_mode==1) // Boton RGB
-	{
-		flagRGB = osEventFlagsGet(rgbModeFlagHandle);
-		switch(flagRGB)
-		{
-			case 0x00000000U:
-				set_RGB(1,0,0); // R
-				osEventFlagsSet(rgbModeFlagHandle, 0x00000001U);
-				break;
-			case 0x00000001U:
-				set_RGB(0,1,0); // G
-				osEventFlagsSet(rgbModeFlagHandle, 0x00000002U);
-				break;
-			case 0x00000002U:
-				set_RGB(0,0,1); // B
-				osEventFlagsSet(rgbModeFlagHandle, 0x00000004U);
-				break;
-			case 0x00000004U:
-				set_RGB(1,1,0); // R+G
-				osEventFlagsSet(rgbModeFlagHandle, 0x00000008U);
-				break;
-			case 0x00000008U:
-				set_RGB(1,0,1); // R+B
-				osEventFlagsSet(rgbModeFlagHandle, 0x00000010U);
-				break;
-			case 0x00000010U:
-				set_RGB(0,1,1); // G+B
-				osEventFlagsSet(rgbModeFlagHandle, 0x00000020U);
-				break;
-			case 0x00000020U:
-				set_RGB(1,1,1); // apagado
-				osEventFlagsSet(rgbModeFlagHandle, 0x00000040U);
-				break;
-			default:
-				set_RGB(0,0,0); //R+G+B
-				osEventFlagsSet(rgbModeFlagHandle, 0x00000000U);
-				break;
-		}
-	}
-}
-
 /* USER CODE END 0 */
 
 /**
@@ -211,7 +176,7 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-
+  lcd_config();
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -219,47 +184,11 @@ int main(void)
   MX_USART2_UART_Init();
   MX_I2C1_Init();
   MX_ADC1_Init();
+  MX_I2C3_Init();
   /* USER CODE BEGIN 2 */
-  // ----- LCD SETTINGS -----
-  lcd.RS_port	= LCD_RS_GPIO_Port;
-  lcd.RS_pin 	= LCD_RS_Pin;
-  //lcd.RW_port = LCD_RW_GPIO_Port;
-  //lcd.RW_pin 	= LCD_RW_Pin;
-  lcd.EN_port 	= LCD_EN_GPIO_Port;
-  lcd.EN_pin 	= LCD_EN_Pin;
-  lcd.D4_port	= D4_GPIO_Port;
-  lcd.D4_pin 	= D4_Pin;
-  lcd.D5_port 	= D5_GPIO_Port;
-  lcd.D5_pin 	= D5_Pin;
-  lcd.D6_port 	= D6_GPIO_Port;
-  lcd.D6_pin 	= D6_Pin;
-  lcd.D7_port 	= D7_GPIO_Port;
-  lcd.D7_pin 	= D7_Pin;
-
-  //lcd_init(&lcd) //
-
-  // ----- LCD Init -----
-  lcd_begin(&lcd, 16, 2, LCD_5x8DOTS);
-
-  // Mensaje inicial
-  lcd_setCursor(&lcd, 0, 0);
-  lcd_print(&lcd, "  Tiempo Real   ");
-  lcd_setCursor(&lcd, 0, 1);
-  lcd_print(&lcd, "  Xiang & Alex  ");
-
-  set_RGB(1,1,1);
-
-  HAL_Delay(3000);
-
-  set_RGB(0,0,0);
-  lcd_clear(&lcd);
-  lcd_home(&lcd);
-
-  //DS1307 init
-  rtc_init(0,1,0);
-
-  rtc_set_time(00,00,00);
-  rtc_set_date(1, 1, 1, 23);
+  ssd1306_Init();
+  lcd_rgb_init(&lcd);
+  ds1307_init();
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -279,7 +208,7 @@ int main(void)
 
   /* Create the queue(s) */
   /* creation of datos */
-  datosHandle = osMessageQueueNew (128, sizeof(float), &datos_attributes);
+  datosHandle = osMessageQueueNew (32, sizeof(float), &datos_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
@@ -292,11 +221,14 @@ int main(void)
   /* creation of mostrarLCD */
   mostrarLCDHandle = osThreadNew(MostrarDatosLCD, NULL, &mostrarLCD_attributes);
 
-  /* creation of lecturaBotones */
-  lecturaBotonesHandle = osThreadNew(LecturaBotones, NULL, &lecturaBotones_attributes);
-
   /* creation of lectura */
   lecturaHandle = osThreadNew(Lectura, NULL, &lectura_attributes);
+
+  /* creation of setRGB */
+  setRGBHandle = osThreadNew(SetRGB, NULL, &setRGB_attributes);
+
+  /* creation of OLED_TASKHAndle */
+  OLED_TASKHAndleHandle = osThreadNew(StartTask06, NULL, &OLED_TASKHAndle_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -309,10 +241,13 @@ int main(void)
   /* creation of rgbModeFlag */
   rgbModeFlagHandle = osEventFlagsNew(&rgbModeFlag_attributes);
 
+  /* creation of myEvent01 */
+  myEvent01Handle = osEventFlagsNew(&myEvent01_attributes);
+
   /* USER CODE BEGIN RTOS_EVENTS */
   /* add events, ... */
-  osEventFlagsSet(lcdDisplayFlagHandle, 0x00000000U);
-  osEventFlagsSet(rgbModeFlagHandle, 0x00000000U);
+  osEventFlagsSet(lcdDisplayFlagHandle, 0x00000001U);
+  osEventFlagsSet(rgbModeFlagHandle, 0x00000080U);
   /* USER CODE END RTOS_EVENTS */
 
   /* Start scheduler */
@@ -463,6 +398,40 @@ static void MX_I2C1_Init(void)
 }
 
 /**
+  * @brief I2C3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C3_Init(void)
+{
+
+  /* USER CODE BEGIN I2C3_Init 0 */
+
+  /* USER CODE END I2C3_Init 0 */
+
+  /* USER CODE BEGIN I2C3_Init 1 */
+
+  /* USER CODE END I2C3_Init 1 */
+  hi2c3.Instance = I2C3;
+  hi2c3.Init.ClockSpeed = 100000;
+  hi2c3.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c3.Init.OwnAddress1 = 0;
+  hi2c3.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c3.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c3.Init.OwnAddress2 = 0;
+  hi2c3.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c3.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C3_Init 2 */
+
+  /* USER CODE END I2C3_Init 2 */
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -511,14 +480,14 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, LD2_Pin|RGB_green_Pin|RGB_red_Pin|RGB_blue_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, LD2_Pin|RGB_green_Pin|RGB_red_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, LCD_EN_Pin|LCD_RS_Pin|D7_Pin|D6_Pin
                           |D5_Pin|D4_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, BotonDisplay_Pin|BotonRGB_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(RGB_blue_GPIO_Port, RGB_blue_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
@@ -526,8 +495,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : LD2_Pin RGB_green_Pin RGB_red_Pin RGB_blue_Pin */
-  GPIO_InitStruct.Pin = LD2_Pin|RGB_green_Pin|RGB_red_Pin|RGB_blue_Pin;
+  /*Configure GPIO pins : LD2_Pin RGB_green_Pin RGB_red_Pin */
+  GPIO_InitStruct.Pin = LD2_Pin|RGB_green_Pin|RGB_red_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -542,18 +511,27 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : BotonDisplay_Pin BotonRGB_Pin */
-  GPIO_InitStruct.Pin = BotonDisplay_Pin|BotonRGB_Pin;
+  /*Configure GPIO pin : RGB_blue_Pin */
+  GPIO_InitStruct.Pin = RGB_blue_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(RGB_blue_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : BotonDisplay_Pin BotonRGB_Pin */
+  GPIO_InitStruct.Pin = BotonDisplay_Pin|BotonRGB_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
 }
 
 /* USER CODE BEGIN 4 */
-/*
-void lcd_config(LCD_t lcd) {
+void lcd_config(void) {
 	lcd.RS_port= LCD_RS_GPIO_Port;
 	lcd.RS_pin = LCD_RS_Pin;
 	//lcd.RW_port = LCD_RW_GPIO_Port;
@@ -569,21 +547,162 @@ void lcd_config(LCD_t lcd) {
 	lcd.D7_port = D7_GPIO_Port;
 	lcd.D7_pin = D7_Pin;
 }
-*/
-/*
-void lcd_init(LCD_t *lcd_dir) {
-	lcd_begin(&lcd, 16, 2, LCD_5x8DOTS);
+
+void lcd_rgb_init(LCD_t *lcd_dir) {
+	lcd_begin(lcd_dir, 16, 2, LCD_5x8DOTS);
 
 	// Mensaje inicial
-	lcd_setCursor(&lcd, 0, 0);
-	lcd_print(&lcd, "  Tiempo Real   ");
-	lcd_setCursor(&lcd, 0, 1);
-	lcd_print(&lcd, "  Xiang & Alex  ");
+	lcd_setCursor(lcd_dir, 0, 0);
+	lcd_print(lcd_dir, "  Tiempo Real   ");
+	lcd_setCursor(lcd_dir, 0, 1);
+	lcd_print(lcd_dir, "  Xiang & Alex  ");
+	set_RGB(1,1,1);
 	HAL_Delay(3000);
-	lcd_clear(&lcd);
-	lcd_home(&lcd);
+	lcd_clear(lcd_dir);
+	lcd_home(lcd_dir);
 }
-*/
+
+void ds1307_init(void)
+{
+	rtc_init(0,1,0);
+
+	rtc_set_time(00,00,00);
+	rtc_set_date(1, 1, 1, 23);
+}
+
+void ssd1306_IniText()
+{
+    uint8_t y = 0;
+
+    //ssd1306_Init();
+    ssd1306_Fill(Black);
+
+	#ifdef SSD1306_INCLUDE_FONT_11x18
+	ssd1306_SetCursor(10, y);
+	ssd1306_WriteString("Comando:", Font_6x8, White);
+	//y += 19;
+	//sprintf(mensaje, "%d", data);
+	ssd1306_SetCursor(75, y);
+	//ssd1306_WriteString(mensaje, Font_16x26, White);
+	ssd1306_WriteString(buffer, Font_11x18, White);
+	y += 19;
+	ssd1306_SetCursor(10, y);
+	sprintf(buff ,"%d", H_data);
+	ssd1306_WriteString(buff, Font_16x26, White);
+	#endif
+
+    ssd1306_UpdateScreen();
+}
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef * huart)
+{
+	int comand = 0;
+	/*if(buffer[0] >= 48 && buffer[0] <= 57 && buffer[1] >= 48 && buffer[1] <= 57){
+		data = (buffer[0] - 48);
+		data = (data * 10);
+		data += (buffer[1] - 48);
+		osEventFlagsSet(myEvent01Handle, 0x00000001U);
+	}else{
+		__NOP();
+	}*/
+	if(buffer[1] == 58)
+	{
+		if(buffer[2] >= 48 && buffer[2] <= 57) H_data = (buffer[2] - 48); //decimal
+		if(buffer[3] >= 48 && buffer[3] <= 57){H_data = (H_data * 10); H_data += (buffer[3] - 48);} //unidad
+
+		comand = buffer[0];
+		switch(comand){
+		case 72: //H-->hora
+			set_hora[0] = H_data;
+			break;
+		case 77: //M-->min
+			set_hora[1] = H_data;
+			break;
+		case 83: //S-->seg
+			set_hora[2] = H_data;
+			break;
+		case 100: // d-->dia
+			set_date[0] = H_data;
+			break;
+		case 109: // m-->mes
+			set_date[1] = H_data;
+			break;
+		case 121: // y-->year
+			set_date[2] = H_data;
+			break;
+		case 119: // w-->week day
+			set_date[3] = H_data;
+			break;
+		}
+	}
+
+	if(1) rtc_set_time(set_hora[0], set_hora[1], set_hora[2]);
+	else rtc_set_date(set_date[3], set_date[0], set_date[1], set_date[2]);
+
+	osEventFlagsSet(myEvent01Handle, 0x00000001U);
+	HAL_UART_Receive_IT(&huart2, buffer, 5);
+}
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef * huart)
+{
+	//HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_9);
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_pin)
+{
+	if(GPIO_pin == GPIO_PIN_11) //Boton RGB
+	{
+		switch(osEventFlagsGet(rgbModeFlagHandle))
+		{
+			case 0x00000080U:
+				osEventFlagsClear(rgbModeFlagHandle, 0x00000080U);
+				osEventFlagsSet(rgbModeFlagHandle, 0x00000001U);
+				break;
+			case 0x00000001U:
+				osEventFlagsClear(rgbModeFlagHandle, 0x00000001U);
+				osEventFlagsSet(rgbModeFlagHandle, 0x00000002U);
+				break;
+			case 0x00000002U:
+				osEventFlagsClear(rgbModeFlagHandle, 0x00000002U);
+				osEventFlagsSet(rgbModeFlagHandle, 0x00000004U);
+				break;
+			case 0x00000004U:
+				osEventFlagsClear(rgbModeFlagHandle, 0x00000004U);
+				osEventFlagsSet(rgbModeFlagHandle, 0x00000008U);
+				break;
+			case 0x00000008U:
+				osEventFlagsClear(rgbModeFlagHandle, 0x00000008U);
+				osEventFlagsSet(rgbModeFlagHandle, 0x00000010U);
+				break;
+			case 0x00000010U:
+				osEventFlagsClear(rgbModeFlagHandle, 0x00000010U);
+				osEventFlagsSet(rgbModeFlagHandle, 0x00000020U);
+				break;
+			case 0x00000020U:
+				osEventFlagsClear(rgbModeFlagHandle, 0x000000020U);
+				osEventFlagsSet(rgbModeFlagHandle, 0x00000040U);
+				break;
+			case 0x00000040U:
+				osEventFlagsClear(rgbModeFlagHandle, 0x00000040U);
+				osEventFlagsSet(rgbModeFlagHandle, 0x00000080U);
+				break;
+		}
+	}
+	if(GPIO_pin == GPIO_PIN_10) //Boton display
+	{
+		if((osEventFlagsGet(lcdDisplayFlagHandle))==0x00000001U)
+		{
+			lcd_noDisplay(&lcd);
+			osEventFlagsClear(lcdDisplayFlagHandle, 0x00000001U);
+			osEventFlagsSet(lcdDisplayFlagHandle, 0x00000002U);
+		}
+		else
+		{
+			lcd_display(&lcd);
+			osEventFlagsClear(lcdDisplayFlagHandle, 0x00000002U);
+			osEventFlagsSet(lcdDisplayFlagHandle, 0x00000001U);
+		}
+	}
+	else __NOP();
+}
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartDefaultTask */
@@ -596,10 +715,14 @@ void lcd_init(LCD_t *lcd_dir) {
 void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN 5 */
+  HAL_UART_Receive_IT(&huart2, buffer, 5);
   /* Infinite loop */
   for(;;)
   {
-	  osDelay(1);
+    osEventFlagsWait(myEvent01Handle, 0x00000002U, osFlagsNoClear, osWaitForever);
+    HAL_UART_Transmit_IT(&huart2, "Y\n", 2);
+    osEventFlagsClear(myEvent01Handle, 0x00000002U);
+    osDelay(10);
   }
   /* USER CODE END 5 */
 }
@@ -637,25 +760,6 @@ void MostrarDatosLCD(void *argument)
   /* USER CODE END MostrarDatosLCD */
 }
 
-/* USER CODE BEGIN Header_LecturaBotones */
-/**
-* @brief Function implementing the lecturaBotones thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_LecturaBotones */
-void LecturaBotones(void *argument)
-{
-  /* USER CODE BEGIN LecturaBotones */
-  /* Infinite loop */
-  for(;;)
-  {
-	leer_pulsador();
-    osDelay(10);
-  }
-  /* USER CODE END LecturaBotones */
-}
-
 /* USER CODE BEGIN Header_Lectura */
 /**
 * @brief Function implementing the lectura thread.
@@ -681,9 +785,77 @@ void Lectura(void *argument)
 	temp_celsius = (((0.001221)*temp)-0.5)/(0.01); //¿¿mal o quemado??
 
 	osMessageQueuePut(datosHandle, &temp_celsius, osPriorityNormal, osWaitForever);
-    osDelay(1);
+    osDelay(10);
   }
   /* USER CODE END Lectura */
+}
+
+/* USER CODE BEGIN Header_SetRGB */
+/**
+* @brief Function implementing the setRGB thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_SetRGB */
+void SetRGB(void *argument)
+{
+  /* USER CODE BEGIN SetRGB */
+  /* Infinite loop */
+  for(;;)
+  {
+	switch(osEventFlagsWait(rgbModeFlagHandle, 0xFF, osFlagsNoClear, osWaitForever))
+	{
+		case 0x0000001U:
+			set_RGB(1,0,0); // R
+		    break;
+		case 0x0000002U:
+			set_RGB(0,1,0); // G
+			break;
+		case 0x00000004U:
+			set_RGB(0,0,1); // B
+			break;
+		case 0x00000008U:
+			set_RGB(1,1,0); // R+G
+			break;
+		case 0x00000010U:
+			set_RGB(1,0,1); // R+B
+			break;
+		case 0x00000020U:
+			set_RGB(0,1,1); // G+B
+			break;
+		case 0x00000040U:
+			set_RGB(1,1,1); // R+G+B
+			break;
+		case 0x00000080U:
+			set_RGB(0,0,0); // apagado
+			break;
+	}
+    osDelay(10);
+  }
+  /* USER CODE END SetRGB */
+}
+
+/* USER CODE BEGIN Header_StartTask06 */
+/**
+* @brief Function implementing the OLED_TASKHAndle thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartTask06 */
+void StartTask06(void *argument)
+{
+  /* USER CODE BEGIN StartTask06 */
+	ssd1306_IniText();
+  /* Infinite loop */
+  for(;;)
+  {
+	osEventFlagsWait(myEvent01Handle, 0x00000001U, osFlagsNoClear, osWaitForever);
+	ssd1306_IniText();
+	osEventFlagsSet(myEvent01Handle, 0x00000002U);
+	osEventFlagsClear(myEvent01Handle, 0x00000001U);
+    osDelay(1);
+  }
+  /* USER CODE END StartTask06 */
 }
 
 /**
